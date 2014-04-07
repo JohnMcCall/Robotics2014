@@ -8,11 +8,12 @@
 //Bank_A: front-right:1, back-right:2
 //Bank_B: front-left: 1, back-left: 2
 
-SoftwareSerial lcd(2, 8);
+SoftwareSerial lcd(2, 9);
 
-Servo elevatorServo;
+//Servo elevatorServo;
 
 NXShield nxshield;
+NXShield sensorShield;
 
 //
 // declare the i2c devices used on NXShield(s).
@@ -25,7 +26,8 @@ void setup(){
   Serial.begin(115200);
   lcd.begin(9600); 
   lcd.write("Setup Starting...");
-  elevatorServo.attach(3);
+  //elevatorServo.attach(3);
+  //elevatorStop();
   delay(500);
   
   nxshield.init(SH_HardwareI2C);
@@ -47,27 +49,13 @@ void setup(){
   
   //approachHoop();
   //approachBackWall(20, 5);
-  scan(20, 5, 5, 5);
+  scan(25, 2, 10, 10);  // backWall distance, backThresh, ballThresh, sideThresh
+
 }
 
 void
 loop(){
-//  strafeLeft(50);
-//  Serial.println("Switching to Left");
-//  Serial.println(sonarB.getDist());
-//  while(sonarB.getDist()>5){ 
-//    Serial.println("StrafingLeft!");
-//    Serial.println(sonarB.getDist());
-//  }
-//// stopMoving();
-// strafeRight(50);
-// Serial.println("Switching to Right");
-// Serial.println(sonarA.getDist());
-//  while(sonarA.getDist()>5){
-//    Serial.println("StrafingRight!");
-//    Serial.println(sonarA.getDist());
-//  }
-//  coloryLights();
+
 }
 
 void
@@ -87,7 +75,7 @@ void scan(int dist, int backThresh, int ballThresh, int sideThresh) {
   lcd.print("BEGIN SCANNING!");
   findCenter(5); // moves the bot to the center
   delay(500);
-  alignLeft(3); // move bot to the left of the field
+  //alignLeft(dist, sideThresh, backThresh); // move bot to the left of the field
   delay(500);
   approachBackWall(dist, backThresh);
   delay(500);
@@ -97,22 +85,27 @@ void scan(int dist, int backThresh, int ballThresh, int sideThresh) {
   
   clearDisplay(); 
   lcd.print("Entering while loop...");
-  while(curDist < (10)) {
+  while(curDist < (ballThresh)) {
      curDist = abs(sonarBack.getDist() - dist);
-     int rightDist = sonarA.getDist() - 3; 
-     
+     int rightDist = sonarA.getDist() - sideThresh; 
+     delay(100);
      
      if(rightDist > 0) {
+      lcd.write("PANNING RIGHT!!");
       strafeRight(50);
      } else {
       clearDisplay();
       lcd.write("Right wall reached?");
-      delay(300);
-      alignLeft(3); // move all the way back to the left when the right wall is reached.
+      delay(200 * sideThresh);
+      approachBackWall(dist, backThresh);
+      alignLeft(dist, sideThresh, backThresh); // move all the way back to the left when the right wall is reached.
       clearDisplay(); 
      }
      
      if(curDist > backThresh) {
+       clearDisplay();
+       lcd.write("correcting dist. !");
+       delay(100);
        approachBackWall(dist, backThresh);
      }
   }
@@ -157,6 +150,7 @@ void approachBackWall(int dist, int thresh) {
   
   while(abs(curDist) > thresh)  {
     curDist = sonarBack.getDist() - dist;
+    delay(100);
     if (curDist < 0) {
       moveForward(50);
     } else {
@@ -171,6 +165,8 @@ void approachBackWall(int dist, int thresh) {
 // centers the robot, and then moves forward till the bot is ~53cm from the hoop wall.
 void approachHoop() {
   findCenter(5);
+  clearDisplay();
+  lcd.write("approachHoop()");
   
   delay(500);
   
@@ -178,45 +174,49 @@ void approachHoop() {
   while(sonarBack.getDist() < 53) { 
   }
   
+  clearDisplay();
   stopMoving();
 }
 
 // a really silly method that just moves the thing left. hopefully. 
-void alignLeft(int dist){
+void alignLeft(int backDist, int sideDist, int backThresh){
  clearDisplay();
  lcd.write("aligning left...");
- setLCDCursor(16);
- lcd.write("Dist: ");
- lcd.write(dist);
  
- int distB = sonarB.getDist() - dist;
+ strafeLeft(50); 
+ 
+ int distB = sonarB.getDist() - sideDist;
+ int curDist = sonarBack.getDist() - backDist;
  
  while(distB > 0) {
-  distB = sonarB.getDist() - dist; 
-  strafeLeft(50); 
+  distB = sonarB.getDist() - sideDist; 
+  curDist = abs(sonarBack.getDist() - backDist) ;
+
+ 
+  
+    if(curDist > backThresh) {
+      //stopMoving();
+      clearDisplay();
+      lcd.write("correcting dist. !");
+      delay(100);
+      approachBackWall(backDist, 2);
+    }
  }
+ stopMoving();
+ clearDisplay(); 
 }
 
 // centers the robot left / right on the field
 void findCenter(int threshold) {
-  clearDisplay();
-  lcd.write("Begining: findCenter("); 
-  lcd.write(threshold);
-  lcd.write(")");
   int distA = sonarA.getDist();
   int distB = sonarB.getDist();
+  
+  clearDisplay();
+  lcd.write("findCenter()..");
   
   while(abs(distA - distB) > threshold) {
     distA = sonarA.getDist();
     distB = sonarB.getDist();
-    
-    clearDisplay(); 
-    lcd.write("Finding Center...");
-    setLCDCursor(16);
-    lcd.write("sonarA: ");
-    lcd.write(distA);
-    lcd.write(" sonarB: ");
-    lcd.write(distB);    
 
     if(distA > distB) {
       strafeRight(50); 
@@ -225,6 +225,7 @@ void findCenter(int threshold) {
     }
   }
   
+  clearDisplay();
   stopMoving();
 }
 
@@ -293,17 +294,17 @@ diagonal(){
 
 
 ///////////////////////////// SERVO COMMANDS ////////////////////////////
-void elevatorRaise() {
- elevatorServo.write(0); 
-}
-
-void elevatorLower() {
- elevatorServo.write(180); 
-}
-
-void elevatorStop() {
- elevatorServo.write(90);
-}
+//void elevatorRaise() {
+// elevatorServo.write(0); 
+//}
+//
+//void elevatorLower() {
+// elevatorServo.write(180); 
+//}
+//
+//void elevatorStop() {
+// elevatorServo.write(90);
+//}
 
 
 ///////////////////////////// LCD COMMANDS //////////////////////////////
@@ -314,7 +315,7 @@ void clearDisplay() {
 
 void setLCDCursor(byte cursor_position){
  lcd.write(0xFE); // ready LCD for special command
- lcd.write(0x08); // ready LCD to recieve cursor potition
+ lcd.write(0x80); // ready LCD to recieve cursor potition
  lcd.write(cursor_position); // send cursor position 
 }
 #
